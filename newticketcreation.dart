@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 
-
 class newticketcreation extends StatefulWidget {
-
   @override
-  _NewTicketCreationState createState() => _NewTicketCreationState();
+  _newticketcreationState createState() => _newticketcreationState();
 }
 
-class _NewTicketCreationState extends State<newticketcreation> {
+class _newticketcreationState extends State<newticketcreation> {
   final TextEditingController _employeenameController = TextEditingController();
   final TextEditingController _employeedepartmentController = TextEditingController();
   final TextEditingController _employeemobileController = TextEditingController();
@@ -20,14 +19,47 @@ class _NewTicketCreationState extends State<newticketcreation> {
 
   String? selectedDepartment;
   double priority = 0;
+  String? base64File;
+  String? filePath;
+  String? errorMessage;
+  bool isUploading = false;
 
-  Future _createNewTicket() async {
+  Future<void> pickFile() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles();
+
+      if (result != null) {
+        File file = File(result.files.single.path!);
+        List<int> fileBytes = await file.readAsBytes();
+        setState(() {
+          base64File = base64Encode(fileBytes);
+          filePath = file.path; // Save the file path
+          errorMessage = null; // Clear previous error message
+        });
+        print("Base64 Encoded File: $base64File");
+      } else {
+        setState(() {
+          errorMessage = "No file selected";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        errorMessage = "Failed to read the file: $e";
+      });
+    }
+  }
+
+  Future<void> _createNewTicket() async {
+    setState(() {
+      isUploading = true;
+    });
+
     final response = await http.post(
       Uri.parse('https://10.0.2.2:7114/api/TicketingSystem/Ticketregister'),
       headers: <String, String>{
         'Content-Type': 'application/json; charset=UTF-8',
       },
-      body: jsonEncode(<dynamic, dynamic>{
+      body: jsonEncode(<String, dynamic>{
         'employeename': _employeenameController.text,
         'employeedepartment': selectedDepartment ?? 'string',
         'employeemobile': _employeemobileController.text,
@@ -35,13 +67,25 @@ class _NewTicketCreationState extends State<newticketcreation> {
         'subject': _subjectController.text,
         'description': _descriptionController.text,
         'rating': priority.toInt(),
+        'filepath': base64File,
       }),
     );
 
+    setState(() {
+      isUploading = false;
+    });
+
     if (response.statusCode == 200) {
       print('Registration successful');
-      return response;
+      setState(() {
+        errorMessage = "Ticket Created successfully.";
+        base64File = null; // Clear the base64File after successful upload
+        filePath = null; // Clear the file path after successful upload
+      });
     } else {
+      setState(() {
+        errorMessage = "Registration failed. Status code: ${response.statusCode}\nResponse body: ${response.body}";
+      });
       throw Exception('Registration failed.');
     }
   }
@@ -180,15 +224,42 @@ class _NewTicketCreationState extends State<newticketcreation> {
               ),
               SizedBox(height: 8.0),
               ElevatedButton(
-                onPressed: () {},
-                child: Text('Upload'),
+                onPressed: pickFile,
+                child: Text('Add an Error Screenshot'),
                 style: ElevatedButton.styleFrom(primary: Colors.orange),
               ),
+              if (filePath != null)
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    'Selected file: $filePath',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+
               SizedBox(height: 8.0),
+
+              // ElevatedButton(
+              //   onPressed: isUploading ? null : _createNewTicket,
+              //   child: isUploading ? CircularProgressIndicator() : Text("Submit"),
+              // ),
+
+              if (errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    errorMessage!,
+                    style: TextStyle(color: Colors.white),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
             ],
           ),
         ),
       ),
+
+
+
       bottomNavigationBar: BottomNavigationBar(
         selectedItemColor: Colors.purple,
         unselectedItemColor: Colors.grey,
